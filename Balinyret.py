@@ -165,7 +165,7 @@ if __name__=='__main__':
     parser.add_argument('--path',help="Ingresar directorio archivos",type=str,required=True)
     parser.add_argument('--path',help="Ingresar directorio archivos",type=str,required=True)
     parser.add_argument('--hivemode', type=str,
-                        default='datasets',
+                        default='new',
                         help='Indica si la tabla es nueva("new"), se sobrescribre de existente ("overwrite") o se agregan ("append"). (default: %(default)s)')
     args=parser.parse_args()
     spark=SparkSession.builder.appName('Balinyret').master('yarn')\

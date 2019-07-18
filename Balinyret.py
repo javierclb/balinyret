@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-# In[66]:
-
-
 #!/usr/bin/env python
 
 from pyspark.sql.functions import *
@@ -14,7 +10,7 @@ from datetime import datetime, timedelta
 from sys import argv
 from pyspark.sql import SparkSession
 from argparse import ArgumentParser
-
+from PLP_Output import saveToHive
 
 def cargar(anio,mes,hdfs_path):
     lista1=["MEDIDAS","BASE","BASE_LT"]
@@ -22,14 +18,14 @@ def cargar(anio,mes,hdfs_path):
     load(hdfs_path, "Balance.accdb",lista1)
     load(hdfs_path,"cmg"+anio[-2:]+mes+".accdb",lista2)
 
-def main(spark,anio,mes,path,sep="/"):
-    
+def main(spark,anio,mes,path,sep="/",hivemode="new"):
+    """Realizamos la carga de datos, como inputs se tienen 4 csv's que se sacan del archivo access otorgado por coordinador,
+    se extraen de manera automática(como se indica más arriba) y se almacenan directamente en machicura, en este mismo directorio se debe poseer
+    los archivos zonas(que principalmente no cambiará mucho de periodo a otro), prorratas(que se deben calcular para cada periodo)
+    fechas(en la cual debe ir el bloque, hp, horadia, tipodia, etc) y por último el archivo CLIENTES_ldx que se actualizan según
+    se realice un cambio""" 
     hdfs_path=path+"/"+anio+mes	
-    #Realizamos la carga de datos, como inputs se tienen 4 csv's que se sacan del archivo access otorgado por coordinador,
-    #se extraen de manera automática(como se indica más arriba) y se almacenan directamente en machicura, en este mismo directorio se debe poseer
-    #los archivos zonas(que principalmente no cambiará mucho de periodo a otro), prorratas(que se deben calcular para cada periodo)
-    #fechas(en la cual debe ir el bloque, hp, horadia, tipodia, etc) y por último el archivo CLIENTES_ldx que se actualizan según
-    #se realice un cambio 
+    
     BASEPRE = spark.read.options(header=True,ignoreLeadingWhiteSpace=True,inferSchema=True,).csv(hdfs_path+'/BASE.csv')
     BASELTPRE = spark.read.options(header=True,ignoreLeadingWhiteSpace=True,inferSchema=True,).csv(hdfs_path+'/BASE_LT.csv')
     ZONAS = spark.read.options(header=True,ignoreLeadingWhiteSpace=True,inferSchema=True,).csv(hdfs_path+'/Zonas.csv')
@@ -156,16 +152,21 @@ def main(spark,anio,mes,path,sep="/"):
     str_mes1 = 'drop table '+'balinyret.balance'+anio+mes
 
     #STRING RELACIONADO A AGREGAR UNA TABLA EN HIVE
-    str_mes2 = 'balinyret.balance'+anio[-2:]+mes
-    BASEFINAL.write.format("parquet").mode('append').partitionBy("ANIO","MES").saveAsTable(str_mes2)
+    str_mes2 = 'balance'+anio[-2:]+mes
+    #BASEFINAL.write.format("parquet").mode('append').partitionBy("ANIO","MES").saveAsTable(str_mes2)
+    saveToHive(BASEFINAL,str_mes2,"balinyret",spark,hivemode=hivemode)
 
 if __name__=='__main__':
-     
+    """ejecucion via spark submit de la forma spark2-submit balinyret.py --mes=mm --anio=aaaa path=directorio_hdfs"""  
     hive_path="hdfs:///user/hive/warehouse"
-    path = "hdfs://machicura.colbunsa.cl:8020/user/jdelafuente/Balancemensual"
     parser=ArgumentParser()
     parser.add_argument('--mes',help="Ingresar mes balance",type=str,required=True)
     parser.add_argument('--anio',help="Ingresar anio balance",type=str,required=True)
+    parser.add_argument('--path',help="Ingresar directorio archivos",type=str,required=True)
+    parser.add_argument('--path',help="Ingresar directorio archivos",type=str,required=True)
+    parser.add_argument('--hivemode', type=str,
+                        default='datasets',
+                        help='Indica si la tabla es nueva("new"), se sobrescribre de existente ("overwrite") o se agregan ("append"). (default: %(default)s)')
     args=parser.parse_args()
     spark=SparkSession.builder.appName('Balinyret').master('yarn')\
                       .enableHiveSupport().config("hive.metastore.warehouse.dir", hive_path)\
@@ -174,7 +175,9 @@ if __name__=='__main__':
 
     anio=args.anio    
     mes=args.mes
+    path=args.path
+    hivemode=args.hivemode
     spark.sparkContext.setLogLevel("ERROR")
-    main(spark,anio,mes,path)
+    main(spark,anio,mes,path,hivemode)
     spark.stop()
 
